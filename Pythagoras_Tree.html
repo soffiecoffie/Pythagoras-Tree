@@ -1,0 +1,248 @@
+﻿<!DOCTYPE html>
+
+<head>
+  <meta charset="utf-8" />
+  <title>Pythagoras tree</title>
+
+  <script id="vshader" type="x-shader/x-vertex">
+    attribute vec2 aXY;
+    attribute vec3 aRGB;
+    varying vec3 vRGB;
+    void main (){
+    	gl_Position = vec4(aXY,0,1);
+    	vRGB = aRGB;
+    }
+  </script>
+
+  <script id="fshader" type="x-shader/x-fragment">
+    precision mediump float;
+    varying vec3 vRGB;
+    void main(){
+    	gl_FragColor = vec4(vRGB,1);
+    }
+  </script>
+
+  <script>
+    var gl;	    	// глобален WebGL контекст
+    var glprog; 	// глобална GLSL програма
+    var FLOATS = Float32Array.BYTES_PER_ELEMENT;
+
+    // Връща WebGL контекст, свързан с HTML елемент с даден id
+    function getContext(id){
+    	var canvas = document.getElementById(id);
+	    if (!canvas){
+	    	alert("Искаме canvas с id=\""+id+"\", а няма!");
+	    	return null;
+	    }
+	
+	    var context = canvas.getContext("webgl");
+	    if (!context){
+	    	context = canvas.getContext("experimental-webgl");
+	    }
+	
+	    if (!context){
+	    	alert("Искаме WebGL контекст, а няма!");
+	    }
+	
+	    return context;
+    }
+
+    // Връща компилиран шейдър
+    function getShader(id,type){
+  	  var source = document.getElementById(id).text;
+  	  var shader = gl.createShader(type);
+
+	    gl.shaderSource(shader,source);
+	    gl.compileShader(shader);
+	    if (!gl.getShaderParameter(shader,gl.COMPILE_STATUS)){
+	    	alert(gl.getShaderInfoLog(shader));
+	    	return null;
+	    }
+	
+    	return shader;
+    }
+
+    // Връща готова програма
+    function getProgram(idv,idf){
+	    var vShader = getShader(idv,gl.VERTEX_SHADER);
+	    var fShader = getShader(idf,gl.FRAGMENT_SHADER);
+			
+	    if (!vShader || !fShader) {return null;}
+	
+    	var shaderProgram = gl.createProgram();
+    	gl.attachShader(shaderProgram,vShader);
+    	gl.attachShader(shaderProgram,fShader);
+    	gl.linkProgram(shaderProgram);
+
+	    if (!gl.getProgramParameter(shaderProgram,gl.LINK_STATUS)){
+		    alert(gl.getProgramInfoLog(shaderProgram));
+		    return null;
+	    }
+
+    	gl.useProgram(shaderProgram);
+	    return shaderProgram;
+    }
+
+    // глобален масив с координатите на базовия квадрат
+    const base = [[0.15,-1],   [-0.15,-1],   [0.15,-0.7],   [-0.15,-0.7]];    
+
+    // Връща координатите x и y на средата на AB
+    function midPoint(pointA,pointB){
+      return [(pointA[0]+pointB[0])*0.5,(pointA[1]+pointB[1])*0.5];
+    }
+
+    // Връща координатите x и y на вектора AB
+    function vectorCreate(pointA,pointB){
+      return [pointB[0]-pointA[0],pointB[1]-pointA[1]];
+    } 
+
+    // Умножава вектор по число
+    function vectorMultiply(vec,n){
+      return [vec[0]*n,vec[1]*n];
+    }
+
+    // Връща координатите x и y на крайната точка на даден вектор
+    function vectorEndPoint(vec, initPoint){
+      return [vec[0]+initPoint[0],vec[1]+initPoint[1]]
+    }
+
+    // Последователно вкарва всички координати от дадена матрица в масив
+    function inputData(points, start=0){
+      var data=[];
+      for (var i = start; i < points.length; ++i) {
+          for (var j = 0; j < points[i].length; ++j) {
+            data.push(points[i][j]);
+          }
+        }
+      return data;
+    }
+
+    // Рисува 
+    function draw(data, N){
+        var buf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(aXY);
+        gl.vertexAttribPointer(aXY,2,gl.FLOAT,false,2*FLOATS,0*FLOATS);
+		  	gl.vertexAttrib3f(aRGB,1,0.5,0.7);
+        gl.drawArrays(gl.TRIANGLE_STRIP,0,2+N);
+    }
+
+    // Рисува дадена итерация на Питагоровото дърво
+    function PythagorasTree([...points], iteration, start){
+      // Рисува базовия квадрат
+      draw(inputData(points),2);
+      // Рисува останалата част от Питагоровото дърво
+      treeDrawHelper(points,iteration,start);
+    }
+
+    // Помощна функция за рисуването на Питагоровото дърво
+    function treeDrawHelper([...points], iteration, start){
+      if(iteration == 0){
+        return;
+      }
+
+      // Смята координатите на върха на правоъгълния триъгълник
+      
+      // средата на диагонала на квадрата 
+      var diagMidPointM = midPoint(points[start],points[start+3]);  
+      // средата на хипотенузата на новия правоъгълен триъгълник //medianSideH
+      var hypMidPointH = midPoint(points[start+2],points[start+3]); 
+      // вектора MH
+      var vecMH = vectorCreate(diagMidPointM,hypMidPointH);             
+      // вектора MC
+      var vecMC = vectorMultiply(vecMH,2);                              
+      // върха на новия триъгълник
+      var trianglePoint = vectorEndPoint(vecMC,diagMidPointM);          
+
+      // Добавяме върха на триъгълника в масива от точки
+      points.push([trianglePoint[0], trianglePoint[1]]);
+
+      // Смята върховете на новите квадрати
+      
+      // За левия квадрат 
+      var lSqrRightPoint = vectorEndPoint(vectorMultiply(vectorCreate(points[points.length-1-2], points[points.length-1]),2),points[points.length-1-2]);
+      var lSqrLeftPoint =vectorEndPoint(vectorMultiply(vectorCreate(diagMidPointM,points[points.length-1-1]),2),diagMidPointM);
+      
+      // Размествам върховете в масива за удобство
+      var tempA = points[points.length-2];
+      points[points.length-1] = points[points.length-2];
+      points[points.length-2] = trianglePoint;
+
+      // Добавя върховете на левия квадрат в масива
+      points.push(lSqrRightPoint,lSqrLeftPoint);
+
+      // Рисува левия квадрат
+      draw(inputData(points,points.length-4),2);
+      // Рисува лявата половина на дървото
+      treeDrawHelper(points, iteration-1, points.length-4);
+
+      // Премахвам последните 3 точки от масива за удобство при рисуването на десния квадрат
+      points.pop();
+      points.pop();
+      points.pop();
+
+      // За десния квадрат
+      var rSqrRightPoint = vectorEndPoint(vectorMultiply(vectorCreate(diagMidPointM,points[points.length-1-1]),2),diagMidPointM);
+      var rSqrLeftPoint = vectorEndPoint(vectorMultiply(vectorCreate(tempA, points[points.length-1]),2),tempA);
+      // Добавя върховете на десния квадрат в масива
+      points.push(rSqrRightPoint,rSqrLeftPoint);
+      
+      // Рисува десния квадрат
+      draw(inputData(points,points.length-4),2);
+      // Рисува дясната половина на дървото
+      treeDrawHelper(points, iteration-1, points.length-4);
+    }
+      
+    function start() {
+      gl = getContext("picasso");
+      glprog = getProgram("vshader", "fshader");
+
+      aXY = gl.getAttribLocation(glprog, "aXY");
+      aRGB = gl.getAttribLocation(glprog, "aRGB");
+
+      gl.clearColor(1, 1, 1, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      iterCount = 0;
+      PythagorasTree(base,0,0);
+      }
+  </script>
+  <style>
+    .button{
+      font-family: 'Open Sans';
+      font-weight: bold;
+      color: rgb(133, 214, 232);
+      font-size: 15px;
+      border-radius:10px;  
+      border: 3px solid !important;
+      min-height:20px; 
+      min-width: 110px;
+      padding: 8px 15px;
+      background-color: white;
+      margin-top: 10px;
+    }
+    .button:hover {
+      color: rgb(30, 34, 109) !important;
+      border-color: rgb(30, 34, 109) !important;
+      border-radius: 50px;
+      transition: all 0.6s ease 0s;
+  }
+  </style>
+</head>
+
+<body onload="start()">
+  <h2 style = "text-align:center; font-family: Georgia, serif; font-weight:normal; font-size: 25px; color: rgb(30, 34, 109);">Pythagoras tree</h2>
+  <noscript> Your browser doesn't support JavaScript </noscript>
+  
+  <div style = "text-align:center;">
+    <canvas id="picasso" width="500" height="500" style="border: solid; border-color: rgb(158, 221, 235); border-width: 6px; border-radius: 25px;">
+      Your browser doesn't support canvas
+    </canvas>
+  </div>
+  <div style = "text-align:center;">
+    <button class="button" onclick="PythagorasTree(base,0,0);iterCount=0;">BASE</button>
+	  <button class="button" onclick="++iterCount;PythagorasTree(base,iterCount,0);">NEXT</button>
+	  <button class="button" onclick="if(iterCount-1>=0) {--iterCount;} PythagorasTree(base,iterCount,0);">PREVIOUS</button>
+  </div>
+</body>
